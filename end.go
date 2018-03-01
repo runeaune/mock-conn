@@ -1,6 +1,7 @@
 package mock_conn
 
 import (
+	"github.com/free/concurrent-writer/concurrent"
 	"io"
 	"net"
 	"time"
@@ -8,8 +9,9 @@ import (
 
 // End is one 'end' of a simulated connection.
 type End struct {
-	Reader *io.PipeReader
-	Writer *io.PipeWriter
+	Reader         *io.PipeReader
+	Writer         *io.PipeWriter
+	BufferedWriter *concurrent.Writer
 }
 
 func (c End) Close() error {
@@ -22,8 +24,16 @@ func (c End) Close() error {
 	return nil
 }
 
-func (e End) Read(data []byte) (n int, err error)  { return e.Reader.Read(data) }
-func (e End) Write(data []byte) (n int, err error) { return e.Writer.Write(data) }
+func (e End) Read(data []byte) (n int, err error) {
+	n, err = e.Reader.Read(data)
+	return n, err
+}
+func (e End) Write(data []byte) (n int, err error) {
+	n, err = e.BufferedWriter.Write(data)
+	// TODO(runeaune): Move the flushing to a single dedicated background thread.
+	go e.BufferedWriter.Flush()
+	return n, err
+}
 
 func (e End) LocalAddr() net.Addr {
 	return Addr{
